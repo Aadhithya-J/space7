@@ -1,4 +1,5 @@
 const bcrypt = require('bcrypt');
+const { Op } = require('sequelize');
 const { User } = require('../models');
 const redis = require('../config/redis');
 const generateOTP = require('../utils/generateOTP');
@@ -14,6 +15,7 @@ class AuthService {
      * Stores signup data temporarily in Redis and sends OTP via email.
      */
     async signup({ username, email, password }) {
+        email = email.toLowerCase();
 
         const existing = await User.findOne({ where: { email } });
 
@@ -61,6 +63,7 @@ class AuthService {
      * Verify OTP and create the user.
      */
     async verifyOTP({ email, otp }) {
+        email = email.toLowerCase();
 
         const storedOTP = await redis.get(`otp:${email}`);
 
@@ -109,14 +112,22 @@ class AuthService {
 
 
     /**
-     * Login with email and password.
+     * Login with username or email, and password.
      */
-    async login({ email, password }) {
+    async login({ identifier, password }) {
+        const normalizedIdentifier = identifier.toLowerCase();
 
-        const user = await User.findOne({ where: { email } });
+        // Check if identifier looks like an email
+        const isEmail = normalizedIdentifier.includes('@');
+
+        const user = await User.findOne({
+            where: isEmail
+                ? { email: normalizedIdentifier }
+                : { username: { [Op.iLike]: normalizedIdentifier } }
+        });
 
         if (!user) {
-            throw Object.assign(new Error('The email or password you entered is incorrect'), { status: 401 });
+            throw Object.assign(new Error('The username/email or password you entered is incorrect'), { status: 401 });
         }
 
         if (!user.is_verified) {
@@ -126,7 +137,7 @@ class AuthService {
         const valid = await bcrypt.compare(password, user.password_hash);
 
         if (!valid) {
-            throw Object.assign(new Error('The email or password you entered is incorrect'), { status: 401 });
+            throw Object.assign(new Error('The username/email or password you entered is incorrect'), { status: 401 });
         }
 
         const token = signToken({
@@ -152,6 +163,7 @@ class AuthService {
      * Send OTP for password reset.
      */
     async forgotPassword({ email }) {
+        email = email.toLowerCase();
 
         const user = await User.findOne({ where: { email } });
 
@@ -181,6 +193,7 @@ class AuthService {
      * Reset password using OTP.
      */
     async resetPassword({ email, otp, newPassword }) {
+        email = email.toLowerCase();
 
         const storedOTP = await redis.get(`otp:reset:${email}`);
 

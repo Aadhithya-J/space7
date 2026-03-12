@@ -12,7 +12,8 @@ const verifyOtpSchema = Joi.object({
 });
 
 const loginSchema = Joi.object({
-    email: Joi.string().email().required(),
+    identifier: Joi.string().min(3).required()
+        .messages({ 'string.min': 'Please enter a valid username or email' }),
     password: Joi.string().required(),
 });
 
